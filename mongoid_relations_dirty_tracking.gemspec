@@ -12,7 +12,7 @@ Gem::Specification.new do |spec|
   spec.license       = "MIT"
 
   spec.add_runtime_dependency 'activesupport', '~> 3.0'
-  spec.add_runtime_dependency 'mongoid', '>= 3.1.0', '< 4.0'
+  spec.add_runtime_dependency 'mongoid', '>= 3.1.0'
 
   spec.add_development_dependency "bundler", "~> 1.3"
   spec.add_development_dependency "rake"
