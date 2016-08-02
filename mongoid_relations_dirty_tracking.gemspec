@@ -11,7 +11,6 @@ Gem::Specification.new do |spec|
   spec.homepage      = "http://github.com/versative/relations_dirty_tracking"
   spec.license       = "MIT"
 
-  spec.add_runtime_dependency 'activesupport', '~> 3.0'
   spec.add_runtime_dependency 'mongoid', '>= 3.1.0'
 
   spec.add_development_dependency "bundler", "~> 1.3"
