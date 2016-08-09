@@ -8,50 +8,63 @@ module Mongoid
     extend ActiveSupport::Concern
 
     included do
-      after_initialize  :store_relations_shadow
-      after_save        :store_relations_shadow
-
-      alias_method_chain :changes, :relations
-      alias_method_chain :changed?, :relations
-
-      cattr_accessor :relations_dirty_tracking_options
-      self.relations_dirty_tracking_options = { only: [], except: ['versions'] }
-
+      after_initialize   :store_initial
+      before_save        :store_relations_shadow
     end
 
+    def store_initial
+      if self.new_record?
+        @initial = {}
+      else
+        @initial = all_tracked_relations_attributes.deep_dup
+      end
+    end
 
     def store_relations_shadow
-      @relations_shadow = {}
-      self.class.tracked_relations.each do |rel_name|
-        @relations_shadow[rel_name] = tracked_relation_attributes(rel_name)
-      end
+      @relations_shadow = all_tracked_relations_attributes
     end
-
 
     def relation_changes
-      changes = {}
-      @relations_shadow.each_pair do |rel_name, shadow_values|
-        current_values = tracked_relation_attributes(rel_name)
-        if current_values != shadow_values
-          changes[rel_name] = [shadow_values, current_values]
+      sort_hash(@initial, @relations_shadow || all_tracked_relations_attributes)
+    end
+
+    def previous_changes
+      super.merge relation_changes
+    end
+
+
+    def sort_hash(prev, cur)
+      prev ||= {}
+      cur ||= {}
+      return {} unless prev.respond_to?("count") && cur.respond_to?("count")
+      good = {}
+      (prev.keys | cur.keys).each do |k|
+        next if k.in?(["_id", "updated_at"])
+        if prev[k].class == Array || cur[k].class == Array
+          good_array = []
+          p_count = prev[k].count rescue -1
+          c_count = cur[k].count rescue -1
+          (p_count > c_count ? p_count : c_count).times do |t|
+            r = sort_hash((prev[k][t] rescue {}), (cur[k][t] rescue {}))
+            good_array << r if r.count > 0
+          end
+          good[k] = good_array if good_array.count > 0
+          next
         end
+        good[k] = [prev[k], cur[k]] if prev[k] != cur[k] && (prev[k].present? || cur[k].present?)
       end
-      changes
+      good["_id"] = prev["_id"] || cur["_id"] if good.count > 0
+      good.compact
     end
 
 
-    def relations_changed?
-      !relation_changes.empty?
-    end
 
-
-    def changed_with_relations?
-      changed_without_relations? or relations_changed?
-    end
-
-
-    def changes_with_relations
-      (changes_without_relations || {}).merge relation_changes
+    def all_tracked_relations_attributes
+      good_hash = {}
+      self.tracked_relations.each do |rel_name|
+        good_hash[rel_name] = tracked_relation_attributes(rel_name)
+      end
+      good_hash
     end
 
 
@@ -60,46 +73,36 @@ module Mongoid
       values = nil
       if meta = relations[rel_name]
         values = if meta.relation == Mongoid::Relations::Embedded::One
-          send(rel_name) && send(rel_name).attributes.clone.delete_if {|key, _| key == 'updated_at' }
+          [send(rel_name).try(:attributes)]
         elsif meta.relation == Mongoid::Relations::Embedded::Many
-          send(rel_name) && send(rel_name).map {|child| child.attributes.clone.delete_if {|key, _| key == 'updated_at' } }
+          send(rel_name).map(&:attributes)
         elsif meta.relation == Mongoid::Relations::Referenced::One
-          send(rel_name) && { "#{meta.key}" => send(rel_name)[meta.key] }
+          [send(rel_name).attributes]
         elsif meta.relation == Mongoid::Relations::Referenced::Many
-          send("#{rel_name.singularize}_ids").map {|id| { "#{meta.key}" => id } }
+          send(rel_name).map(&:attributes)
         elsif meta.relation == Mongoid::Relations::Referenced::ManyToMany
-          send("#{rel_name.singularize}_ids").map {|id| { "#{meta.primary_key}" => id } }
-        elsif meta.relation == Mongoid::Relations::Referenced::In
-          send(meta.foreign_key) && { "#{meta.foreign_key}" => send(meta.foreign_key)}
+          send(rel_name).map(&:attributes)
+        # elsif meta.relation == Mongoid::Relations::Referenced::In
+        #   send(meta.foreign_key) && { "#{meta.foreign_key}" => send(meta.foreign_key)}
         end
       end
       values
     end
 
 
-    module ClassMethods
-
-      def relations_dirty_tracking(options = {})
-        relations_dirty_tracking_options[:only] += [options[:only] || []].flatten.map(&:to_s)
-        relations_dirty_tracking_options[:except] += [options[:except] || []].flatten.map(&:to_s)
-      end
 
 
-      def track_relation?(rel_name)
-        rel_name = rel_name.to_s
-        options = relations_dirty_tracking_options
-        to_track = (!options[:only].blank? && options[:only].include?(rel_name)) \
-          || (options[:only].blank? && !options[:except].include?(rel_name))
+    def track_relation?(rel_name)
+      rel_name = rel_name.to_s
 
-        to_track && [Mongoid::Relations::Embedded::One, Mongoid::Relations::Embedded::Many,
-          Mongoid::Relations::Referenced::One, Mongoid::Relations::Referenced::Many,
-          Mongoid::Relations::Referenced::ManyToMany, Mongoid::Relations::Referenced::In].include?(relations[rel_name].try(:relation))
-      end
+      ([Mongoid::Relations::Referenced::One, Mongoid::Relations::Referenced::Many, Mongoid::Relations::Referenced::ManyToMany,
+       Mongoid::Relations::Referenced::In].include?(relations[rel_name].try(:relation)) && self.respond_to?("#{rel_name}_attributes=")) ||
+       [Mongoid::Relations::Embedded::One, Mongoid::Relations::Embedded::Many].include?(relations[rel_name].try(:relation))
+    end
 
 
-      def tracked_relations
-        @tracked_relations ||= relations.keys.select {|rel_name| track_relation?(rel_name) }
-      end
+    def tracked_relations
+      @tracked_relations ||= relations.keys.select {|rel_name| track_relation?(rel_name) }
     end
   end
 end
