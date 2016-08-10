@@ -8,7 +8,6 @@ module Mongoid
     extend ActiveSupport::Concern
 
     included do
-      after_initialize   :store_initial
       before_save        :store_relations_shadow
     end
 

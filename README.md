@@ -1,4 +1,4 @@
-Note: This has been heavily modified for my specific use-case. Use at your own risk!
+Note: This has been heavily modified for my specific use-case. The instructions below might not work! Use at your own risk!
 
 # Mongoid::RelationsDirtyTracking
 
