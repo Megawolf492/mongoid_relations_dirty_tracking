@@ -73,15 +73,15 @@ module Mongoid
       values = nil
       if meta = relations[rel_name]
         values = if meta.relation == Mongoid::Relations::Embedded::One
-          [send(rel_name).try(:attributes)]
+          [send(rel_name).try(:attributes)].compact
         elsif meta.relation == Mongoid::Relations::Embedded::Many
-          send(rel_name).map(&:attributes)
+          send(rel_name).map{|a| a.try(:attributes)}.compact
         elsif meta.relation == Mongoid::Relations::Referenced::One
-          [send(rel_name).attributes]
+          [send(rel_name).try(:attributes)].compact
         elsif meta.relation == Mongoid::Relations::Referenced::Many
-          send(rel_name).map(&:attributes)
+          send(rel_name).map{|a| a.try(:attributes)}.compact
         elsif meta.relation == Mongoid::Relations::Referenced::ManyToMany
-          send(rel_name).map(&:attributes)
+          send(rel_name).map{|a| a.try(:attributes)}.compact
         # elsif meta.relation == Mongoid::Relations::Referenced::In
         #   send(meta.foreign_key) && { "#{meta.foreign_key}" => send(meta.foreign_key)}
         end
