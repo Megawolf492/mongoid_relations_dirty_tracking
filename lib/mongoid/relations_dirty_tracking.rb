@@ -35,7 +35,7 @@ module Mongoid
     def sort_hash(prev, cur)
       prev ||= {}
       cur ||= {}
-      return {} unless prev.respond_to?("count") && cur.respond_to?("count")
+      return {} unless prev.respond_to?("keys") && cur.respond_to?("keys")
       good = {}
       (prev.keys | cur.keys).each do |k|
         next if k.in?(["_id", "updated_at"])
